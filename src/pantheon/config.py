@@ -44,5 +44,9 @@ def api_key() -> str:
     return ""
 
 
+def memory_dir() -> str:
+    return os.environ.get("MEMORY_DIR", ".memory")
+
+
 def verbose() -> bool:
     return os.environ.get("VERBOSE", "") in ("1", "true")

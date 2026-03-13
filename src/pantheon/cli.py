@@ -12,6 +12,7 @@ from rich.table import Table
 
 from . import config, agent as agent_mod, orchestrate
 from .gateway import Client
+from .memory import FileStore, session_id
 from .tools import builtins
 
 console = Console(stderr=True)
@@ -124,8 +125,14 @@ def cmd_list() -> None:
 def cmd_chat(name: str) -> None:
     agents = _agents()
     a = _get(agents, name)
+    store = FileStore(config.memory_dir())
+    sid = session_id(name, "interactive")
+
+    if store.load(sid):
+        console.print(f"[dim][restored session {sid[:8]}][/dim]")
+
     console.print(f"Chatting with [bold]{a.name}[/bold] ({a.persona}) — model: {a.model}")
-    console.print("Commands: /reset  /quit\n")
+    console.print("Commands: /reset  /save  /quit\n")
 
     while True:
         try:
@@ -140,10 +147,16 @@ def cmd_chat(name: str) -> None:
             a.reset()
             console.print("[dim][history cleared][/dim]")
             continue
+        if user_input == "/save":
+            store.save(sid, a._history)
+            console.print(f"[dim][session saved: {sid[:8]}][/dim]")
+            continue
 
         print(f"\n{a.name}> ", end="", flush=True)
         a.send_stream(user_input, on_chunk=lambda c: print(c, end="", flush=True))
         print("\n")
+
+    store.save(sid, a._history)
 
 
 def cmd_ask(name: str, msg: str) -> None:
