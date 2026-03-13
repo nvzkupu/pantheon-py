@@ -131,7 +131,10 @@ def cmd_chat(name: str) -> None:
     if store.load(sid):
         console.print(f"[dim][restored session {sid[:8]}][/dim]")
 
-    console.print(f"Chatting with [bold]{a.name}[/bold] ({a.persona}) — model: {a.model}")
+    console.print(
+        f"Chatting with [bold]{a.name}[/bold]"
+        f" ({a.persona}) — model: {a.model}",
+    )
     console.print("Commands: /reset  /save  /quit\n")
 
     while True:
@@ -148,7 +151,7 @@ def cmd_chat(name: str) -> None:
             console.print("[dim][history cleared][/dim]")
             continue
         if user_input == "/save":
-            store.save(sid, a._history)
+            store.save(sid, a.history)
             console.print(f"[dim][session saved: {sid[:8]}][/dim]")
             continue
 
@@ -156,7 +159,7 @@ def cmd_chat(name: str) -> None:
         a.send_stream(user_input, on_chunk=lambda c: print(c, end="", flush=True))
         print("\n")
 
-    store.save(sid, a._history)
+    store.save(sid, a.history)
 
 
 def cmd_ask(name: str, msg: str) -> None:
@@ -224,7 +227,10 @@ def cmd_review(agent_list: str, input_text: str) -> None:
     agents = _agents()
     names = [n.strip() for n in agent_list.split(",")]
     if len(names) < 2:
-        console.print("[red]review needs at least 2 agents (reviewers + synthesizer)[/red]")
+        console.print(
+            "[red]review needs at least 2 agents"
+            " (reviewers + synthesizer)[/red]",
+        )
         sys.exit(1)
 
     synth = _get(agents, names[-1])
@@ -252,10 +258,14 @@ def cmd_warroom() -> None:
     names = sorted(agents)
 
     console.print()
-    console.print("  ╔══════════════════════════════════════════════════╗", style="bold")
-    console.print("  ║                THE WAR ROOM                     ║", style="bold")
-    console.print("  ║     Your pantheon stands ready for battle.      ║", style="bold")
-    console.print("  ╚══════════════════════════════════════════════════╝", style="bold")
+    box_top = "  ╔══════════════════════════════════════════════╗"
+    box_mid1 = "  ║              THE WAR ROOM                   ║"
+    box_mid2 = "  ║   Your pantheon stands ready for battle.    ║"
+    box_bot = "  ╚══════════════════════════════════════════════╝"
+    console.print(box_top, style="bold")
+    console.print(box_mid1, style="bold")
+    console.print(box_mid2, style="bold")
+    console.print(box_bot, style="bold")
     console.print()
     for n in names:
         a = agents[n]
@@ -312,7 +322,10 @@ def cmd_warroom() -> None:
             print("\n")
             continue
 
-        console.print("  Use @<name> to address an agent, /all to broadcast, /quit to exit.")
+        console.print(
+            "  Use @<name> to address an agent,"
+            " /all to broadcast, /quit to exit.",
+        )
 
     console.print("\n  The war room goes dark.")
 

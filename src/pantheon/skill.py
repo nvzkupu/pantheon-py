@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+_log = logging.getLogger(__name__)
+
 
 @dataclass
 class Metadata:
     persona: str = ""
     model: str = ""
-    temperature: float = 0.0
+    temperature: float | None = None
     max_tokens: int = 0
     max_iterations: int = 0
     tools: list[str] = field(default_factory=list)
@@ -39,7 +42,9 @@ class Skill:
 
     @property
     def temperature(self) -> float:
-        return self.metadata.temperature or 0.7
+        if self.metadata.temperature is not None:
+            return self.metadata.temperature
+        return 0.7
 
     @property
     def max_tokens(self) -> int:
@@ -101,7 +106,11 @@ def parse_text(text: str, path: str = "<string>") -> Skill:
     metadata = Metadata(
         persona=raw_meta.get("persona", ""),
         model=raw_meta.get("model", ""),
-        temperature=float(raw_meta.get("temperature", 0)),
+        temperature=(
+            float(raw_meta["temperature"])
+            if "temperature" in raw_meta
+            else None
+        ),
         max_tokens=int(raw_meta.get("max_tokens", 0)),
         max_iterations=int(raw_meta.get("max_iterations", 0)),
         tools=raw_meta.get("tools", []) or [],
@@ -134,8 +143,7 @@ def discover(directory: str | Path) -> list[Skill]:
         try:
             skills.append(parse(skill_path))
         except (ValueError, yaml.YAMLError) as e:
-            import sys
-            print(f"warning: skipping {skill_path}: {e}", file=sys.stderr)
+            _log.warning("skipping %s: %s", skill_path, e)
     return skills
 
 

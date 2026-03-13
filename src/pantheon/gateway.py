@@ -7,10 +7,27 @@ Drop-in replaceable with litellm for 100+ provider support:
 from __future__ import annotations
 
 import json
+import random
+import time as _time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import requests
+
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 3
+_BASE_DELAY = 1.0
+_MAX_DELAY = 30.0
+
+
+def _retry_delay(attempt: int, response: requests.Response | None = None) -> float:
+    """Compute backoff delay with jitter, respecting Retry-After header."""
+    if response is not None:
+        ra = response.headers.get("Retry-After")
+        if ra and ra.isdigit():
+            return float(ra)
+    delay = min(_BASE_DELAY * (2 ** attempt), _MAX_DELAY)
+    return delay + random.uniform(0, delay / 2)
 
 
 @dataclass
@@ -22,7 +39,11 @@ class Message:
     name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"role": self.role, "content": self.content}
+        d: dict[str, Any] = {"role": self.role}
+        if self.content or not self.tool_calls:
+            d["content"] = self.content
+        else:
+            d["content"] = None
         if self.tool_calls:
             d["tool_calls"] = self.tool_calls
         if self.tool_call_id:
@@ -57,45 +78,112 @@ class Client:
         if api_key:
             self.session.headers["Authorization"] = f"Bearer {api_key}"
 
+    def close(self) -> None:
+        self.session.close()
+
+    def __enter__(self) -> Client:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     def chat(self, *, model: str, messages: list[Message],
              temperature: float = 0.7, max_tokens: int = 4096,
-             tools: list[dict] | None = None) -> ChatResponse:
-        payload = self._build_payload(model, messages, temperature, max_tokens, tools)
-        resp = self.session.post(f"{self.base_url}/chat/completions", json=payload)
-        resp.raise_for_status()
-        return self._parse_response(resp.json())
+             tools: list[dict] | None = None,
+             tool_choice: str | dict | None = None) -> ChatResponse:
+        payload = self._build_payload(
+            model, messages, temperature, max_tokens,
+            tools, tool_choice,
+        )
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_RETRIES):
+            resp = self.session.post(f"{self.base_url}/chat/completions", json=payload)
+            if resp.status_code == 200:
+                return self._parse_response(resp.json())
+            if resp.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES - 1:
+                resp.raise_for_status()
+            last_exc = requests.HTTPError(response=resp)
+            _time.sleep(_retry_delay(attempt, resp))
+        raise last_exc  # type: ignore[misc]
 
     def chat_stream(self, *, model: str, messages: list[Message],
                     temperature: float = 0.7, max_tokens: int = 4096,
                     on_chunk: Callable[[str], None] | None = None) -> str:
-        payload = self._build_payload(model, messages, temperature, max_tokens)
-        payload["stream"] = True
-        resp = self.session.post(
-            f"{self.base_url}/chat/completions", json=payload, stream=True)
-        resp.raise_for_status()
+        result = self.chat_stream_full(
+            model=model, messages=messages, temperature=temperature,
+            max_tokens=max_tokens, on_chunk=on_chunk)
+        return result.content
 
-        full = []
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
-                continue
-            data = line[6:]
-            if data == "[DONE]":
+    def chat_stream_full(self, *, model: str, messages: list[Message],
+                         temperature: float = 0.7, max_tokens: int = 4096,
+                         tools: list[dict] | None = None,
+                         on_chunk: Callable[[str], None] | None = None) -> ChatResponse:
+        """Stream a response, accumulating both content and tool call deltas."""
+        payload = self._build_payload(model, messages, temperature, max_tokens, tools)
+        payload["stream"] = True
+
+        resp: requests.Response | None = None
+        for attempt in range(_MAX_RETRIES):
+            resp = self.session.post(
+                f"{self.base_url}/chat/completions", json=payload, stream=True)
+            if resp.status_code == 200:
                 break
-            try:
-                chunk = json.loads(data)
-                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                content = delta.get("content", "")
-                if content:
-                    full.append(content)
-                    if on_chunk:
-                        on_chunk(content)
-            except (json.JSONDecodeError, IndexError):
-                continue
-        return "".join(full)
+            if resp.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES - 1:
+                resp.raise_for_status()
+            _time.sleep(_retry_delay(attempt, resp))
+        if resp is None:
+            raise RuntimeError("all retry attempts failed")
+
+        with resp:
+            content_parts: list[str] = []
+            tool_calls: dict[int, dict] = {}
+
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    text = delta.get("content", "")
+                    if text:
+                        content_parts.append(text)
+                        if on_chunk:
+                            on_chunk(text)
+                    for tc_delta in delta.get("tool_calls", []):
+                        idx = tc_delta.get("index", 0)
+                        if idx in tool_calls:
+                            tool_calls[idx]["function"]["arguments"] += (
+                                tc_delta.get("function", {}).get(
+                                    "arguments", "",
+                                ))
+                        else:
+                            tool_calls[idx] = {
+                                "id": tc_delta.get("id", ""),
+                                "type": tc_delta.get("type", "function"),
+                                "function": {
+                                    "name": tc_delta.get(
+                                        "function", {},
+                                    ).get("name", ""),
+                                    "arguments": tc_delta.get(
+                                        "function", {},
+                                    ).get("arguments", ""),
+                                },
+                            }
+                except (json.JSONDecodeError, IndexError):
+                    continue
+
+            return ChatResponse(
+                content="".join(content_parts),
+                tool_calls=list(tool_calls.values()),
+            )
 
     def _build_payload(self, model: str, messages: list[Message],
                        temperature: float, max_tokens: int,
-                       tools: list[dict] | None = None) -> dict:
+                       tools: list[dict] | None = None,
+                       tool_choice: str | dict | None = None) -> dict:
         payload: dict[str, Any] = {
             "model": model,
             "messages": [m.to_dict() for m in messages],
@@ -104,6 +192,8 @@ class Client:
         }
         if tools:
             payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
         return payload
 
     def _parse_response(self, data: dict) -> ChatResponse:

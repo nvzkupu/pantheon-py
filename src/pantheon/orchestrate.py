@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from .agent import Agent, Event
-from .tools import Tool
+from .tools import Tool, strict_schema
 
 
 class AgentTool(Tool):
@@ -26,13 +25,9 @@ class AgentTool(Tool):
                 f"Specializes in: {self._agent.use_for}")
 
     def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "task": {"type": "string", "description": "Task for this specialist"},
-            },
-            "required": ["task"],
-        }
+        return strict_schema({
+            "task": {"type": "string", "description": "Task for this specialist"},
+        }, ["task"])
 
     def execute(self, args: dict[str, Any]) -> str:
         self._agent.reset()
@@ -58,17 +53,37 @@ class Team:
             f"- ask_{s.name}: {s.name} ({s.persona}) — {s.use_for}"
             for s in self.specialists.values())
 
-        self.lead.skill.body += f"""
-
-You coordinate a specialist team. Available specialists:
-
-{roster}
-
-RULES:
-1. Break complex tasks into subtasks and delegate to the best specialist.
-2. Synthesize specialist responses into a coherent answer.
-3. Attribute insights to the specialist who provided them.
-4. For simple questions you can answer directly."""
+        self.lead.system_suffix = (
+            "\n\nYou are the lead coordinator of a"
+            " specialist team. Analyze requests,"
+            " delegate to the right specialist, and"
+            " synthesize their responses."
+            "\n\nAvailable specialists:\n"
+            f"{roster}"
+            "\n\nPROTOCOL:\n"
+            "1. If the request is simple and within"
+            " your own expertise, answer directly.\n"
+            "2. For specialized work, delegate to the"
+            " MOST specific specialist available.\n"
+            "3. For complex requests, decompose into"
+            " independent subtasks and delegate them"
+            " in parallel (you may call multiple"
+            " specialists in one turn).\n"
+            "4. Each delegation must be self-contained"
+            " — include all context, file paths, and"
+            " requirements. Specialists cannot see"
+            " this conversation.\n"
+            "5. If a specialist returns an error,"
+            " acknowledge it and either retry with a"
+            " revised task or explain the limitation."
+            "\n\nSYNTHESIS:\n"
+            "- Attribute key insights to the specialist"
+            " who produced them.\n"
+            "- Resolve contradictions between specialists"
+            " explicitly.\n"
+            "- Present a unified, actionable response"
+            " — not raw specialist outputs."
+        )
 
         self.lead.reset()
 
@@ -121,7 +136,7 @@ class Review:
         return self._synthesize(input_text, results)
 
     def _fan_out(self, input_text: str) -> list[ReviewResult]:
-        results: list[ReviewResult] = [ReviewResult("", "", "")] * len(self.reviewers)
+        results: list[ReviewResult] = [ReviewResult("", "", "") for _ in self.reviewers]
 
         def review(idx: int, agent: Agent) -> None:
             start = time.monotonic()
@@ -150,10 +165,13 @@ class Review:
             for r in results)
 
         prompt = (
-            f"Synthesize these specialist reviews into a single, actionable response.\n\n"
+            "Synthesize these specialist reviews into"
+            " a single, actionable response.\n\n"
             f"Original request:\n{input_text}\n\n"
             f"Reviews:\n{reviews}\n\n"
-            f"Provide a unified response with the most important points from each reviewer.")
+            "Provide a unified response with the most"
+            " important points from each reviewer."
+        )
 
         self.synthesizer.reset()
         return self.synthesizer.run(prompt)

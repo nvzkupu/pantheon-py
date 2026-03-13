@@ -81,4 +81,5 @@ def cost_estimate(model: str, usage: Usage) -> float:
         in_rate, out_rate = 0.10, 0.40
     else:
         in_rate, out_rate = 3.0, 15.0
-    return (usage.prompt_tokens * in_rate + usage.completion_tokens * out_rate) / 1_000_000
+    cost = usage.prompt_tokens * in_rate + usage.completion_tokens * out_rate
+    return cost / 1_000_000

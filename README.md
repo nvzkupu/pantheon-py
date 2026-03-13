@@ -74,6 +74,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 | calliope | Your Eloquent Muse | opus | Prompts, LLM |
 | maat | Your Steadfast Arbiter | opus | Values alignment |
 | eris | Your Playful Challenger | nano | Challenge assumptions |
+| nisaba | Your Scribe of the Reed | opus | Markdown, linting, formatting |
 
 ## Cross-Tool Portability
 
@@ -88,7 +89,7 @@ Runtime config under `metadata` is used by the Python toolkit and ignored by IDE
 
 ```
 pantheon-py/
-├── .agents/skills/      15 specialist skills (agentskills.io)
+├── .agents/skills/      16 specialist skills (agentskills.io)
 ├── .cursor/
 │   ├── rules/           pantheon.mdc (always-on identity)
 │   └── commands/        Slash commands

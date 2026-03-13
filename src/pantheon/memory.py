@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from .gateway import Message
+
+_log = logging.getLogger(__name__)
 
 
 class Store(Protocol):
@@ -66,8 +69,13 @@ class FileStore:
         sess = self._load_raw(session_id)
         if not sess:
             return []
-        return [Message(role=m.get("role", ""), content=m.get("content", ""))
-                for m in sess.messages]
+        return [Message(
+            role=m.get("role", ""),
+            content=m.get("content") or "",
+            tool_calls=m.get("tool_calls", []),
+            tool_call_id=m.get("tool_call_id", ""),
+            name=m.get("name", ""),
+        ) for m in sess.messages]
 
     def _load_raw(self, session_id: str) -> _Session | None:
         path = self._path(session_id)
@@ -143,6 +151,7 @@ class SummaryCompressor:
         try:
             summary = self.summarize(to_summarize)
         except Exception:
+            _log.warning("summary compression failed", exc_info=True)
             return messages
 
         return (prefix

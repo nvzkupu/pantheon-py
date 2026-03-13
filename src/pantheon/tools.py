@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
+_log = logging.getLogger(__name__)
+_MAX_READ_SIZE = 10 * 1024 * 1024
 
 
 class Tool(ABC):
@@ -31,6 +35,7 @@ class Tool(ABC):
                 "name": self.name(),
                 "description": self.description(),
                 "parameters": self.parameters(),
+                "strict": True,
             },
         }
 
@@ -54,8 +59,16 @@ class Registry:
             return f"error: unknown tool '{name}'"
         try:
             args = json.loads(args_json) if args_json else {}
+            missing = check_required(tool.parameters(), args)
+            if missing:
+                fields = ", ".join(missing)
+                return f"error: missing required fields for '{name}': {fields}"
             return tool.execute(args)
-        except Exception as e:
+        except (
+            json.JSONDecodeError, KeyError, ValueError,
+            OSError, subprocess.SubprocessError,
+        ) as e:
+            _log.warning("tool '%s' failed: %s", name, e)
             return f"error: {e}"
 
     def execute_all(self, calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -64,14 +77,34 @@ class Registry:
         def run_one(call: dict) -> dict[str, Any]:
             fn = call.get("function", {})
             result = self.execute(fn.get("name", ""), fn.get("arguments", ""))
-            return {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
+            return {
+                "role": "tool",
+                "tool_call_id": call.get("id", ""),
+                "content": result,
+            }
 
         with ThreadPoolExecutor() as pool:
             return list(pool.map(run_one, calls))
 
 
-def _param(desc: str, typ: str = "string") -> dict:
+def param(desc: str, typ: str = "string") -> dict:
     return {"type": typ, "description": desc}
+
+
+def check_required(schema: dict, args: dict) -> list[str]:
+    """Return list of required fields missing from args."""
+    required = schema.get("required", [])
+    return [f for f in required if f not in args or args[f] is None]
+
+
+def strict_schema(properties: dict, required: list[str]) -> dict:
+    """Build a JSON Schema object with additionalProperties: false for strict mode."""
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
 class ShellExec(Tool):
@@ -79,17 +112,31 @@ class ShellExec(Tool):
         return "shell_exec"
 
     def description(self) -> str:
-        return "Execute a shell command. Returns stdout/stderr. 60s timeout."
+        return (
+            "Execute a shell command in the system shell"
+            " and return combined stdout/stderr output."
+            " Use this tool to run build commands, install"
+            " packages, query system state, or perform any"
+            " operation available via the command line."
+            " The command times out after 60 seconds;"
+            " long-running processes will be killed."
+            " On Windows runs via cmd.exe; on Unix uses"
+            " the user's default shell."
+            " Returns '(no output)' when the command"
+            " succeeds but produces no output."
+        )
 
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "command": _param("Shell command to execute"),
-                "workdir": _param("Working directory (optional)"),
-            },
-            "required": ["command"],
-        }
+        return strict_schema({
+            "command": param(
+                "The shell command to execute,"
+                " e.g. 'pip install requests' or 'ls -la'",
+            ),
+            "workdir": param(
+                "Working directory for the command."
+                " Pass empty string for current directory",
+            ),
+        }, ["command", "workdir"])
 
     def execute(self, args: dict) -> str:
         cmd = args["command"]
@@ -118,19 +165,31 @@ class ReadFile(Tool):
         return "read_file"
 
     def description(self) -> str:
-        return "Read the contents of a file."
+        return (
+            "Read the full contents of a file and return"
+            " it as a UTF-8 string. Use this tool when you"
+            " need to inspect source code, configuration"
+            " files, or any text file. Returns a descriptive"
+            " error if the file does not exist or cannot be"
+            " read. Does not support binary files; use"
+            " shell_exec for binary operations."
+        )
 
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {"path": _param("File path to read")},
-            "required": ["path"],
-        }
+        return strict_schema({
+            "path": param(
+                "Absolute or relative file path to read,"
+                " e.g. 'src/main.py'",
+            ),
+        }, ["path"])
 
     def execute(self, args: dict) -> str:
         try:
-            return Path(args["path"]).read_text(encoding="utf-8")
-        except Exception as e:
+            p = Path(args["path"])
+            if p.stat().st_size > _MAX_READ_SIZE:
+                return "error: file exceeds 10 MB limit"
+            return p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
             return f"error: {e}"
 
 
@@ -139,17 +198,26 @@ class WriteFile(Tool):
         return "write_file"
 
     def description(self) -> str:
-        return "Write content to a file, creating parent directories as needed."
+        return (
+            "Write text content to a file, creating any"
+            " missing parent directories automatically."
+            " Use this tool to create new files or overwrite"
+            " existing ones with the provided content."
+            " The file is written with UTF-8 encoding."
+            " Returns a confirmation with the byte count"
+            " written, or an error if the write fails."
+        )
 
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path": _param("File path"),
-                "content": _param("Content to write"),
-            },
-            "required": ["path", "content"],
-        }
+        return strict_schema({
+            "path": param(
+                "Absolute or relative file path to write,"
+                " e.g. 'output/result.json'",
+            ),
+            "content": param(
+                "The full text content to write to the file",
+            ),
+        }, ["path", "content"])
 
     def execute(self, args: dict) -> str:
         try:
@@ -157,7 +225,7 @@ class WriteFile(Tool):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(args["content"], encoding="utf-8")
             return f"wrote {len(args['content'])} bytes to {p}"
-        except Exception as e:
+        except OSError as e:
             return f"error: {e}"
 
 
@@ -166,20 +234,29 @@ class ListDir(Tool):
         return "list_dir"
 
     def description(self) -> str:
-        return "List files and directories. Dirs are suffixed with /."
+        return (
+            "List all files and subdirectories in a"
+            " directory, one entry per line. Directory"
+            " entries are suffixed with '/' to distinguish"
+            " them from files. Use this tool to explore"
+            " project structure or verify that expected"
+            " files exist. Returns an error if the path"
+            " does not exist or is not a directory."
+        )
 
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {"path": _param("Directory path")},
-            "required": ["path"],
-        }
+        return strict_schema({
+            "path": param(
+                "Absolute or relative path to the"
+                " directory to list, e.g. 'src/'",
+            ),
+        }, ["path"])
 
     def execute(self, args: dict) -> str:
         try:
             entries = sorted(Path(args["path"]).iterdir())
             return "\n".join(f"{e.name}/" if e.is_dir() else e.name for e in entries)
-        except Exception as e:
+        except OSError as e:
             return f"error: {e}"
 
 
@@ -188,17 +265,26 @@ class SearchFiles(Tool):
         return "search_files"
 
     def description(self) -> str:
-        return "Search for files matching a glob pattern (max 100 results)."
+        return (
+            "Recursively search for files matching a glob"
+            " pattern, starting from a root directory."
+            " Returns matching file paths (one per line),"
+            " capped at 100 results. Supports Python glob"
+            " syntax including '**/' for recursive matching."
+            " Returns 'no matches found' if nothing matches."
+        )
 
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "pattern": _param("Glob pattern (e.g. '**/*.py')"),
-                "root": _param("Root directory (default: '.')"),
-            },
-            "required": ["pattern"],
-        }
+        return strict_schema({
+            "pattern": param(
+                "Glob pattern for matching files,"
+                " e.g. '**/*.py', '*.test.js'",
+            ),
+            "root": param(
+                "Root directory to search from."
+                " Pass empty string for current directory",
+            ),
+        }, ["pattern", "root"])
 
     def execute(self, args: dict) -> str:
         root = Path(args.get("root", "."))

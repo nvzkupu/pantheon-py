@@ -66,7 +66,8 @@ Body content."""
             parse_text("---\nname: test\n---\n\nBody", "/test/SKILL.md")
 
     def test_name_inferred_from_path(self):
-        s = parse_text("---\ndescription: inferred\n---\n\nBody", "/skills/myskill/SKILL.md")
+        text = "---\ndescription: inferred\n---\n\nBody"
+        s = parse_text(text, "/skills/myskill/SKILL.md")
         assert s.name == "myskill"
 
     def test_no_frontmatter_raises(self):
