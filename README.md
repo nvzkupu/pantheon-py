@@ -88,7 +88,7 @@ Runtime config under `metadata` is used by the Python toolkit and ignored by IDE
 
 ```
 pantheon-py/
-├── .agents/skills/      13 specialist skills (agentskills.io)
+├── .agents/skills/      15 specialist skills (agentskills.io)
 ├── .cursor/
 │   ├── rules/           pantheon.mdc (always-on identity)
 │   └── commands/        Slash commands
