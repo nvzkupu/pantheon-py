@@ -64,6 +64,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 | freya | Your Loyal Commander | opus | Task routing |
 | saraswati | Your Gifted Artisan | codex | Production code |
 | brigid | Your Faithful Craftswoman | codex | Go code |
+| nuwa | Your Serpent Creator | codex | Python code, data science |
 | themis | Your Vigilant Guardian | opus | Tests, CI/CD |
 | kali | Your Fierce Protector | opus | Security |
 | pele | Your Resilient Flame | opus | Ops, reliability |
