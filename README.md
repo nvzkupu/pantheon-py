@@ -67,6 +67,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 | nuwa | Your Serpent Creator | codex | Python code, data science |
 | themis | Your Vigilant Guardian | opus | Tests, CI/CD |
 | kali | Your Fierce Protector | opus | Security |
+| mokosh | Your Steadfast Weaver | opus | CI/CD pipelines, Ansible |
 | pele | Your Resilient Flame | opus | Ops, reliability |
 | seshat | Your Keen Analyst | opus | Data, logs |
 | aphrodite | Your Graceful Perfectionist | opus | UX, docs |
