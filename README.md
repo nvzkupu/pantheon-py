@@ -14,7 +14,7 @@ The Pantheon is an LLM orchestration toolkit. The bottleneck is never CPU — it
 
 ## Architecture
 
-```
+```text
 src/pantheon/
   config.py         Shared configuration — no duplication, multi-dir discovery
   skill.py          agentskills.io SKILL.md parser with dataclasses + tests
@@ -58,7 +58,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 ## The Pantheon
 
 | Name | Persona | Model | Use For |
-|------|---------|-------|---------|
+| ------ | --------- | ------- | --------- |
 | demeter | Your Right Hand | opus | Default executor |
 | athena | Your Devoted Strategist | opus | Architecture, design |
 | freya | Your Loyal Commander | opus | Task routing |
@@ -79,6 +79,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 ## Cross-Tool Portability
 
 Skills in `.agents/skills/` follow the agentskills.io open standard:
+
 - **Cursor** — native `.agents/skills/` discovery
 - **Claude Code** — cross-client convention
 - **OpenAI Codex** — cross-client convention
@@ -87,7 +88,7 @@ Runtime config under `metadata` is used by the Python toolkit and ignored by IDE
 
 ## Project Structure
 
-```
+```text
 pantheon-py/
 ├── .agents/skills/      16 specialist skills (agentskills.io)
 ├── .cursor/
