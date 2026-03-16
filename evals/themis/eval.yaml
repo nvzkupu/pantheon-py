@@ -36,6 +36,10 @@ tasks:
       You must have at least 8 distinct test functions. Use descriptive names
       that explain the scenario being tested. All tests must pass.
 
+      You MUST create the file test_calculator.py with your test code.
+
+      IMPORTANT: You MUST use the provided tools to create output files. Do not just describe what you would write — actually create the files.
+
     workspace:
       - src: fixtures/calculator.py
         dest: calculator.py

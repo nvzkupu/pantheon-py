@@ -26,6 +26,8 @@ tasks:
 
       Do not install any packages. Use only shell commands and file operations.
 
+      IMPORTANT: You MUST use the provided tools to create output files. Do not just describe what you would write — actually create the files.
+
     workspace:
       - src: fixtures/config.yaml
         dest: config.yaml

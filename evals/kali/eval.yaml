@@ -33,6 +33,8 @@ tasks:
       Focus on real, exploitable vulnerabilities. Do not report style issues
       or theoretical risks.
 
+      IMPORTANT: You MUST use the provided tools to create output files. Do not just describe what you would write — actually create the files.
+
     workspace:
       - src: fixtures/app.py
         dest: app.py

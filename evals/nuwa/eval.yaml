@@ -20,20 +20,20 @@ tasks:
 
       Create a file called `records.py` that implements:
 
-      1. `parse_records(path: str) -> list[Record]` — reads the CSV file and returns
-         a list of `Record` instances. Handle missing fields gracefully:
-         - Missing `email` or `name`: use empty string
-         - Missing `role`: use `"unknown"`
-         - Missing `active`: default to `False`
-         - `active` field should be converted from string `"true"`/`"false"` to `bool`
-         - `id` should be converted to `int`
+      `parse_records(path: str) -> list[Record]` — reads the CSV file and returns
+      a list of `Record` instances. Handle missing fields gracefully:
+      - Missing `email` or `name`: use empty string
+      - Missing `role`: use `"unknown"`
+      - Missing `active`: default to `False`
+      - `active` field should be converted from string `"true"`/`"false"` to `bool`
+      - `id` should be converted to `int`
 
-      2. `filter_by(records: list[Record], **kwargs) -> list[Record]` — filters the
-         list by any combination of field values. Example: `filter_by(records, role="engineer")`
-         returns only records where role equals "engineer".
-
-      Both functions must have complete type hints. Import `Record` from `models`.
+      The function must have complete type hints. Import `Record` from `models`.
       Use only the standard library (csv module). Do not install any packages.
+
+      The file must be importable. Test with: `python3 -c "from records import parse_records"`
+
+      IMPORTANT: You MUST use the provided tools to create output files. Do not just describe what you would write — actually create the files.
 
     workspace:
       - src: fixtures/data.csv
