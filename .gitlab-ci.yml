@@ -23,6 +23,7 @@ variables:
   before_script:
     - python3 -m venv .venv
     - source .venv/bin/activate
+    - pip install --quiet --upgrade pip
     - pip install --quiet -e ".[dev]"
 
 .setup_node:
