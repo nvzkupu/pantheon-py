@@ -47,7 +47,7 @@ variables:
 
 lint:
   stage: check
-  tags: [os:linux]
+  tags: [os/ubuntu]
   extends: .setup_python
   script:
     - ruff check src/ tests/
@@ -57,7 +57,7 @@ lint:
 
 unit_test:
   stage: check
-  tags: [os:linux]
+  tags: [os/ubuntu]
   extends: .setup_python
   script:
     - pytest tests/ -v
@@ -69,7 +69,7 @@ unit_test:
 
 eval:
   stage: eval
-  tags: [os:linux]
+  tags: [os/ubuntu]
   extends: .setup_node
   needs: [lint, unit_test]
   variables:
