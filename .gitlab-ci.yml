@@ -39,7 +39,16 @@ variables:
     - fnm install "$NODE_VERSION" --progress=never
     - fnm use "$NODE_VERSION"
     - node --version
-    - npm install --global --prefix "$CI_PROJECT_DIR/.npm-global" skillgrade
+    - |
+      SGDIR="$CI_PROJECT_DIR/.skillgrade-src"
+      if [ ! -d "$SGDIR" ]; then
+        git clone --depth 1 https://gitlab-master.nvidia.com/zkupu/skillgrade.git "$SGDIR"
+        cd "$SGDIR"
+        npm ci
+        npm run build
+        cd "$CI_PROJECT_DIR"
+      fi
+    - npm install --global --prefix "$CI_PROJECT_DIR/.npm-global" "$CI_PROJECT_DIR/.skillgrade-src"
     - export PATH="$CI_PROJECT_DIR/.npm-global/bin:$PATH"
     - skillgrade --version
 
