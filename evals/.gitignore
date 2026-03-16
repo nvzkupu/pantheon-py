@@ -1,0 +1,6 @@
+# Skillgrade results
+results/
+*.log
+
+# Never commit API keys
+.env

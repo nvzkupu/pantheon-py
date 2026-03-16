@@ -1,0 +1,68 @@
+name: Skillgrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: "Skill to evaluate (blank = all)"
+        required: false
+        default: ""
+      preset:
+        description: "Evaluation preset"
+        required: true
+        default: "smoke"
+        type: choice
+        options:
+          - smoke
+          - reliable
+          - regression
+  push:
+    branches: [master]
+    paths:
+      - ".agents/skills/**"
+      - "evals/**"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".agents/skills/**"
+      - "evals/**"
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install skillgrade
+        run: npm i -g skillgrade
+
+      - name: Run evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PRESET="${{ inputs.preset || 'smoke' }}"
+          SKILL="${{ inputs.skill }}"
+
+          if [ -n "$SKILL" ]; then
+            echo "=== eval: $SKILL ==="
+            cd "evals/$SKILL"
+            skillgrade "--$PRESET" --ci --threshold=0.8
+          else
+            for dir in evals/*/eval.yaml; do
+              skill=$(basename "$(dirname "$dir")")
+              [ "$skill" = "_template" ] && continue
+              echo "=== eval: $skill ==="
+              cd "evals/$skill"
+              skillgrade "--$PRESET" --ci --threshold=0.8
+              cd "$GITHUB_WORKSPACE"
+            done
+          fi
+
+      - name: Preview results
+        if: always()
+        run: skillgrade preview || true
