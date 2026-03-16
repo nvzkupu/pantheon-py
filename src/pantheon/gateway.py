@@ -70,13 +70,16 @@ class ChatResponse:
 
 class Client:
     def __init__(self, base_url: str, api_key: str, timeout: int = 300):
+        if not api_key:
+            raise ValueError(
+                "API key is required. Set API_KEY or NVIDIA_API_KEY"
+                " in your environment, or pass it to Client() directly.")
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.session = requests.Session()
         self.session.timeout = timeout
         self.session.headers.update({"Content-Type": "application/json"})
-        if api_key:
-            self.session.headers["Authorization"] = f"Bearer {api_key}"
+        self.session.headers["Authorization"] = f"Bearer {api_key}"
 
     def close(self) -> None:
         self.session.close()
@@ -137,6 +140,7 @@ class Client:
         with resp:
             content_parts: list[str] = []
             tool_calls: dict[int, dict] = {}
+            usage = Usage()
 
             for line in resp.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data: "):
@@ -172,12 +176,20 @@ class Client:
                                     ).get("arguments", ""),
                                 },
                             }
+                    chunk_usage = chunk.get("usage")
+                    if chunk_usage:
+                        usage = Usage(
+                            prompt_tokens=chunk_usage.get("prompt_tokens", 0),
+                            completion_tokens=chunk_usage.get("completion_tokens", 0),
+                            total_tokens=chunk_usage.get("total_tokens", 0),
+                        )
                 except (json.JSONDecodeError, IndexError):
                     continue
 
             return ChatResponse(
                 content="".join(content_parts),
                 tool_calls=list(tool_calls.values()),
+                usage=usage,
             )
 
     def _build_payload(self, model: str, messages: list[Message],

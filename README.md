@@ -22,6 +22,8 @@ src/pantheon/
   agent.py          Agent runtime: load from skills, ReAct loop, streaming
   tools.py          Tool interface, registry, builtins (OS-aware shell)
   orchestrate.py    Agent-as-tool, teams, pipelines, fan-out review
+  memory.py         File-backed session persistence, window trimming, summary compression
+  observe.py        Structured tracing, cost estimation, event collection
   cli.py            Single entry point: list, chat, ask, run, team, pipe, review, warroom
 ```
 
@@ -94,7 +96,7 @@ pantheon-py/
 ├── .cursor/
 │   ├── rules/           pantheon.mdc (always-on identity)
 │   └── commands/        Slash commands
-├── src/pantheon/        Python source (7 modules)
+├── src/pantheon/        Python source (9 modules)
 ├── tests/               pytest tests
 ├── pyproject.toml       Modern Python packaging
 ├── AGENTS.md            Cross-tool fallback

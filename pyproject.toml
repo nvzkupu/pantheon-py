@@ -6,8 +6,8 @@ build-backend = "hatchling.build"
 name = "pantheon"
 version = "0.1.0"
 description = "Agentic AI toolkit with tool use, multi-agent orchestration, and pipelines."
-requires-python = ">=3.11"
-license = "MIT"
+requires-python = ">=3.10"
+license = {text = "MIT"}
 dependencies = [
     "pyyaml>=6.0",
     "requests>=2.31",
@@ -25,7 +25,7 @@ pantheon = "pantheon.cli:main"
 packages = ["src/pantheon"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

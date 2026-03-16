@@ -160,7 +160,25 @@ class ShellExec(Tool):
             return "error: command timed out after 60s"
 
 
+def _check_allowed(path: Path, allowed_roots: list[Path] | None) -> str | None:
+    """Return an error string if path is outside all allowed roots, or None if ok."""
+    if not allowed_roots:
+        return None
+    resolved = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root.resolve())
+            return None
+        except ValueError:
+            continue
+    roots_str = ", ".join(str(r) for r in allowed_roots)
+    return f"error: path '{path}' is outside allowed roots: {roots_str}"
+
+
 class ReadFile(Tool):
+    def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
+        self._allowed_roots = [Path(r) for r in allowed_roots] if allowed_roots else None
+
     def name(self) -> str:
         return "read_file"
 
@@ -186,6 +204,8 @@ class ReadFile(Tool):
     def execute(self, args: dict) -> str:
         try:
             p = Path(args["path"])
+            if err := _check_allowed(p, self._allowed_roots):
+                return err
             if p.stat().st_size > _MAX_READ_SIZE:
                 return "error: file exceeds 10 MB limit"
             return p.read_text(encoding="utf-8")
@@ -194,6 +214,9 @@ class ReadFile(Tool):
 
 
 class WriteFile(Tool):
+    def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
+        self._allowed_roots = [Path(r) for r in allowed_roots] if allowed_roots else None
+
     def name(self) -> str:
         return "write_file"
 
@@ -222,6 +245,8 @@ class WriteFile(Tool):
     def execute(self, args: dict) -> str:
         try:
             p = Path(args["path"])
+            if err := _check_allowed(p, self._allowed_roots):
+                return err
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(args["content"], encoding="utf-8")
             return f"wrote {len(args['content'])} bytes to {p}"

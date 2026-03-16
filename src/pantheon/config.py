@@ -16,6 +16,8 @@ def load_env(path: str = ".env") -> None:
             continue
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
+        if value and len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
         if key and not os.environ.get(key):
             os.environ[key] = value
 

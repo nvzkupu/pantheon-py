@@ -71,15 +71,29 @@ class Tracker:
         return handler
 
 
-def cost_estimate(model: str, usage: Usage) -> float:
-    """Rough USD cost estimate for a model and token usage."""
-    if "opus" in model:
-        in_rate, out_rate = 15.0, 75.0
-    elif "codex" in model:
-        in_rate, out_rate = 6.0, 24.0
-    elif "nano" in model:
-        in_rate, out_rate = 0.10, 0.40
-    else:
-        in_rate, out_rate = 3.0, 15.0
+_DEFAULT_PRICING: dict[str, tuple[float, float]] = {
+    "opus": (15.0, 75.0),
+    "codex": (6.0, 24.0),
+    "nano": (0.10, 0.40),
+}
+_FALLBACK_RATE: tuple[float, float] = (3.0, 15.0)
+
+
+def cost_estimate(
+    model: str,
+    usage: Usage,
+    pricing: dict[str, tuple[float, float]] | None = None,
+) -> float:
+    """Rough USD cost estimate for a model and token usage.
+
+    The pricing dict maps model name substrings to (input_rate, output_rate)
+    per million tokens. Falls back to a default rate if no key matches.
+    """
+    rates = pricing if pricing is not None else _DEFAULT_PRICING
+    in_rate, out_rate = _FALLBACK_RATE
+    for key, (ir, orr) in rates.items():
+        if key in model:
+            in_rate, out_rate = ir, orr
+            break
     cost = usage.prompt_tokens * in_rate + usage.completion_tokens * out_rate
     return cost / 1_000_000
