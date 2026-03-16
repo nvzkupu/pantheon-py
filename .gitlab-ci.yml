@@ -1,0 +1,108 @@
+# Pantheon CI Pipeline
+#
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   API_KEY      — NVIDIA NIM API key
+#   GATEWAY_URL  — NVIDIA NIM gateway endpoint
+#
+# All tooling (node, fnm, npm packages) is installed inside the workspace
+# and cleaned up by GitLab between jobs — zero persistent footprint on the runner.
+
+stages:
+  - check
+  - eval
+
+variables:
+  NIM_MODEL: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  FNM_DIR: "$CI_PROJECT_DIR/.fnm"
+  NODE_VERSION: "20"
+
+# ── Setup templates ──────────────────────────────────────────
+
+.setup_python:
+  before_script:
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install --quiet -e ".[dev]"
+
+.setup_node:
+  before_script:
+    - export FNM_DIR="$CI_PROJECT_DIR/.fnm"
+    - export PATH="$FNM_DIR:$PATH"
+    - |
+      if ! command -v fnm &>/dev/null; then
+        curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "$FNM_DIR" --skip-shell
+        export PATH="$FNM_DIR:$PATH"
+      fi
+    - eval "$(fnm env)"
+    - fnm install "$NODE_VERSION" --progress=never
+    - fnm use "$NODE_VERSION"
+    - node --version
+    - npm install --global --prefix "$CI_PROJECT_DIR/.npm-global" skillgrade
+    - export PATH="$CI_PROJECT_DIR/.npm-global/bin:$PATH"
+    - skillgrade --version
+
+# ── Check stage ──────────────────────────────────────────────
+
+lint:
+  stage: check
+  tags: [os:linux]
+  extends: .setup_python
+  script:
+    - ruff check src/ tests/
+  cache:
+    key: pip
+    paths: [.pip-cache/]
+
+unit_test:
+  stage: check
+  tags: [os:linux]
+  extends: .setup_python
+  script:
+    - pytest tests/ -v
+  cache:
+    key: pip
+    paths: [.pip-cache/]
+
+# ── Eval stage ───────────────────────────────────────────────
+
+eval:
+  stage: eval
+  tags: [os:linux]
+  extends: .setup_node
+  needs: [lint, unit_test]
+  variables:
+    NIM_API_KEY: $API_KEY
+    NIM_BASE_URL: $GATEWAY_URL
+  script:
+    - export PATH="$CI_PROJECT_DIR/.npm-global/bin:$CI_PROJECT_DIR/.fnm:$PATH"
+    - eval "$(fnm env)"
+    - |
+      failed=0
+      for dir in evals/*/eval.yaml; do
+        skill=$(basename "$(dirname "$dir")")
+        [ "$skill" = "_template" ] && continue
+        echo "=== eval: $skill ==="
+        cd "evals/$skill"
+        if skillgrade --smoke --ci --provider=local --agent=nim --output="$CI_PROJECT_DIR/results/$skill"; then
+          echo "=== $skill: PASSED ==="
+        else
+          echo "=== $skill: FAILED ==="
+          failed=$((failed + 1))
+        fi
+        cd "$CI_PROJECT_DIR"
+      done
+      if [ "$failed" -gt 0 ]; then
+        echo "=== $failed skill(s) below threshold ==="
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - results/
+    expire_in: 7 days
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"
