@@ -60,6 +60,7 @@ lint:
   extends: .setup_python
   script:
     - ruff check src/ tests/
+    - python .agents/scripts/skill_validate.py validate
   cache:
     key: pip
     paths: [.pip-cache/]

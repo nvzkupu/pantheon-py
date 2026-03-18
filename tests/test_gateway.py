@@ -144,6 +144,16 @@ class TestClientChat:
             model="test", messages=[Message(role="user", content="hello")])
         assert result.content == "hi"
         assert result.usage.total_tokens == 7
+        client.session.post.assert_called_once_with(
+            "http://test/chat/completions",
+            json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hello"}],
+                "temperature": 0.7,
+                "max_tokens": 4096,
+            },
+            timeout=300,
+        )
 
     def test_retries_on_429(self):
         client = Client("http://test", "key")
@@ -231,6 +241,33 @@ class TestClientStreamFull:
         assert result.tool_calls[0]["id"] == "tc-1"
         assert json.loads(result.tool_calls[0]["function"]["arguments"]) == {"msg": "hi"}
 
+    def test_sorts_streamed_tool_calls_by_index(self):
+        client = Client("http://test", "key")
+        chunks = [
+            {"choices": [{"delta": {"tool_calls": [{
+                "index": 1, "id": "tc-2", "type": "function",
+                "function": {"name": "second", "arguments": '{"b":2}'},
+            }]}}]},
+            {"choices": [{"delta": {"tool_calls": [{
+                "index": 0, "id": "tc-1", "type": "function",
+                "function": {"name": "first", "arguments": '{"a":1}'},
+            }]}}]},
+        ]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = self._sse_lines(*chunks)
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        client.session.post = MagicMock(return_value=mock_resp)
+
+        result = client.chat_stream_full(
+            model="test", messages=[Message(role="user", content="hi")])
+
+        assert [item["function"]["name"] for item in result.tool_calls] == [
+            "first",
+            "second",
+        ]
+
     def test_accumulates_usage_from_final_chunk(self):
         client = Client("http://test", "key")
         chunks = [
@@ -269,6 +306,18 @@ class TestClientStreamFull:
             result = client.chat_stream_full(
                 model="test", messages=[Message(role="user", content="hi")])
         assert result.content == "ok"
+        client.session.post.assert_any_call(
+            "http://test/chat/completions",
+            json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "stream": True,
+            },
+            stream=True,
+            timeout=300,
+        )
 
 
 class TestClientContextManager:

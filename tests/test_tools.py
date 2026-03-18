@@ -1,11 +1,13 @@
 """Tests for tool interface, registry, validation, and builtins."""
 
+import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from pantheon.tools import (
     Registry, Tool, check_required, strict_schema, builtins,
-    ReadFile, WriteFile, ListDir,
+    ReadFile, WriteFile, ListDir, ShellExec, SearchFiles,
 )
 
 
@@ -144,6 +146,52 @@ class TestBuiltinTools:
             result = tool.execute({"path": d})
             assert "file.txt" in result
             assert "subdir/" in result
+
+    def test_shell_exec_success(self, monkeypatch):
+        tool = ShellExec()
+        completed = subprocess.CompletedProcess(
+            args=["/bin/sh", "-c", "echo hi"],
+            returncode=0,
+            stdout="hi\n",
+            stderr="",
+        )
+        run = MagicMock(return_value=completed)
+        monkeypatch.setattr("pantheon.tools.subprocess.run", run)
+        monkeypatch.setattr("pantheon.tools.platform.system", lambda: "Linux")
+        monkeypatch.setenv("SHELL", "/bin/sh")
+
+        result = tool.execute({"command": "echo hi", "workdir": ""})
+
+        assert result == "hi"
+        run.assert_called_once()
+
+    def test_shell_exec_timeout(self, monkeypatch):
+        tool = ShellExec()
+        monkeypatch.setattr(
+            "pantheon.tools.subprocess.run",
+            MagicMock(side_effect=subprocess.TimeoutExpired(cmd="sleep", timeout=60)),
+        )
+        monkeypatch.setattr("pantheon.tools.platform.system", lambda: "Linux")
+        monkeypatch.setenv("SHELL", "/bin/sh")
+
+        result = tool.execute({"command": "sleep 120", "workdir": ""})
+
+        assert result == "error: command timed out after 60s"
+
+    def test_search_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "a.py").write_text("print('a')")
+            (root / "nested").mkdir()
+            (root / "nested" / "b.py").write_text("print('b')")
+            (root / "nested" / "c.txt").write_text("c")
+            tool = SearchFiles()
+
+            result = tool.execute({"pattern": "**/*.py", "root": d})
+
+            assert str(root / "a.py") in result
+            assert str(root / "nested" / "b.py") in result
+            assert "c.txt" not in result
 
 
 class TestPathRestrictions:

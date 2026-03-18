@@ -1,4 +1,4 @@
-.PHONY: install dev test lint check clean eval eval-skill eval-preview eval-init
+.PHONY: install dev test lint validate-skills check clean eval eval-skill eval-preview eval-init
 
 install:
 	pip install .
@@ -12,7 +12,10 @@ test:
 lint:
 	ruff check src/ tests/
 
-check: lint test
+validate-skills:
+	python .agents/scripts/skill_validate.py validate
+
+check: lint validate-skills test
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__

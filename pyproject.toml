@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 litellm = ["litellm>=1.40"]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+dev = ["pytest>=8.0", "pytest-cov", "ruff>=0.4"]
 
 [project.scripts]
 pantheon = "pantheon.cli:main"
@@ -29,3 +29,4 @@ target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=src/pantheon --cov-report=term-missing --cov-fail-under=80"

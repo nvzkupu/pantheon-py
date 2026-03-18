@@ -47,6 +47,30 @@ pantheon review kali,pele,themis,athena "Review for production readiness"
 pantheon warroom
 ```
 
+## Configuration
+
+Pantheon reads configuration from environment variables and `.env`:
+
+- `GATEWAY_URL` or `NVIDIA_GATEWAY_URL`: OpenAI-compatible gateway base URL
+- `API_KEY` or `NVIDIA_API_KEY`: API key for the configured gateway
+- `SKILLS_DIR` or `AGENTS_DIR`: override the skills directory instead of `.agents/skills`
+- `MEMORY_DIR`: override the session storage directory instead of `.memory`
+- `VERBOSE`: set to `1` or `true` to show tool calls and token usage in CLI flows
+
+The README examples use `GATEWAY_URL` and `API_KEY`, but the NVIDIA-prefixed
+fallbacks are supported for compatibility with existing environments.
+
+## Cursor Commands
+
+Cursor command files live under `.cursor/commands/` and provide focused entry
+points for common Pantheon workflows:
+
+- `/plan`: apply Athena and produce an implementation plan before coding
+- `/review`: run a multi-specialist production-readiness review
+- `/test`: apply Themis for test strategy and verification work
+- `/security-audit`: apply Kali for security review
+- `/values-check`: apply Maat for engineering-values alignment
+
 ## Upgrading to litellm
 
 The gateway client is a thin HTTP wrapper. To unlock 100+ LLM providers:
@@ -69,6 +93,7 @@ Then replace the `Client` with `litellm.completion()` calls. The agent runtime s
 | nuwa | Your Serpent Creator | codex | Python code, data science |
 | themis | Your Vigilant Guardian | opus | Tests, CI/CD |
 | kali | Your Fierce Protector | opus | Security |
+| cardea | Your Iron Gatekeeper | opus | Safe GitLab project ops, approval-gated overwrites |
 | mokosh | Your Steadfast Weaver | opus | CI/CD pipelines, Ansible |
 | pele | Your Resilient Flame | opus | Ops, reliability |
 | seshat | Your Keen Analyst | opus | Data, logs |
@@ -88,14 +113,29 @@ Skills in `.agents/skills/` follow the agentskills.io open standard:
 
 Runtime config under `metadata` is used by the Python toolkit and ignored by IDE integrations.
 
+## Utility Scripts
+
+Pantheon uses two utility-script locations:
+
+- Shared repo-wide helpers live in `.agents/scripts/`
+- Agent-local helpers live in `.agents/skills/<agent>/scripts/`
+
+The shared script index and conventions live in `.agents/scripts/README.md`.
+Current shared utilities:
+
+- `overlay_guard.py`: classify local overlay changes as `create-safe` or `review-required`
+- `skill_validate.py`: validate Pantheon roster, eval, command, and script consistency
+
 ## Project Structure
 
 ```text
 pantheon-py/
-├── .agents/skills/      16 specialist skills (agentskills.io)
+├── .agents/skills/      17 specialist skills (agentskills.io)
+├── .agents/scripts/     Shared safety and workflow utilities
 ├── .cursor/
 │   ├── rules/           pantheon.mdc (always-on identity)
 │   └── commands/        Slash commands
+├── evals/               Skillgrade smoke evals and graders
 ├── src/pantheon/        Python source (9 modules)
 ├── tests/               pytest tests
 ├── pyproject.toml       Modern Python packaging
@@ -107,9 +147,37 @@ pantheon-py/
 
 ```bash
 pip install -e ".[dev]"
+make validate-skills
 pytest
 ruff check src/ tests/
 ```
+
+Pytest is configured to exercise the local `src/` tree even if another editable
+install of `pantheon` exists elsewhere on the machine. The test suite also
+enforces a coverage floor for `src/pantheon`.
+
+## Evaluations
+
+Pantheon includes `skillgrade` smoke evals for individual skills:
+
+```bash
+make eval
+make eval-skill SKILL=nuwa
+make eval-init SKILL=newskill
+./evals/bin/run-remaining.sh
+```
+
+Local eval runs require `skillgrade` on `PATH`. The GitLab pipeline installs the
+Node/fnm toolchain and `skillgrade` automatically, but local runs still need the
+same gateway credentials as normal execution:
+
+- `API_KEY` or `NVIDIA_API_KEY`
+- `GATEWAY_URL` or `NVIDIA_GATEWAY_URL`
+
+For ad hoc batches, `evals/bin/run-remaining.sh` now resolves the repository
+root dynamically, discovers evals from `evals/*/eval.yaml`, and reads `.env`
+from the current checkout instead of a machine-specific absolute path. Pass
+skill names as arguments to limit the batch to a subset.
 
 ## Design Principles
 

@@ -76,8 +76,8 @@ class Client:
                 " in your environment, or pass it to Client() directly.")
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.timeout = timeout
         self.session = requests.Session()
-        self.session.timeout = timeout
         self.session.headers.update({"Content-Type": "application/json"})
         self.session.headers["Authorization"] = f"Bearer {api_key}"
 
@@ -100,7 +100,11 @@ class Client:
         )
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
-            resp = self.session.post(f"{self.base_url}/chat/completions", json=payload)
+            resp = self.session.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                timeout=self.timeout,
+            )
             if resp.status_code == 200:
                 return self._parse_response(resp.json())
             if resp.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES - 1:
@@ -128,7 +132,11 @@ class Client:
         resp: requests.Response | None = None
         for attempt in range(_MAX_RETRIES):
             resp = self.session.post(
-                f"{self.base_url}/chat/completions", json=payload, stream=True)
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                stream=True,
+                timeout=self.timeout,
+            )
             if resp.status_code == 200:
                 break
             if resp.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES - 1:
@@ -188,7 +196,7 @@ class Client:
 
             return ChatResponse(
                 content="".join(content_parts),
-                tool_calls=list(tool_calls.values()),
+                tool_calls=[tool_calls[idx] for idx in sorted(tool_calls)],
                 usage=usage,
             )
 
