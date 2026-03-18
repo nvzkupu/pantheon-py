@@ -3,7 +3,15 @@
 import os
 from unittest.mock import patch
 
-from pantheon.config import load_env, skills_dir, gateway_url, api_key, memory_dir, verbose
+from pantheon.config import (
+    api_key,
+    gateway_url,
+    load_env,
+    memory_dir,
+    repo_root,
+    skills_dir,
+    verbose,
+)
 
 
 class TestLoadEnv:
@@ -68,6 +76,40 @@ class TestLoadEnv:
             assert os.environ["TEST_PANTHEON_URL"] == "http://host?a=1&b=2"
             del os.environ["TEST_PANTHEON_URL"]
 
+    def test_default_env_resolves_repo_root(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        env_file = repo / ".env"
+        env_file.parent.mkdir(parents=True)
+        env_file.write_text("TEST_PANTHEON_ROOTED=repo-root\n")
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        (repo / "pyproject.toml").write_text("[project]\nname='pantheon'\nversion='0.1.0'\n")
+        workdir = repo / "nested" / "dir"
+        workdir.mkdir(parents=True)
+        monkeypatch.chdir(workdir)
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TEST_PANTHEON_ROOTED", None)
+            load_env()
+            assert os.environ["TEST_PANTHEON_ROOTED"] == "repo-root"
+            del os.environ["TEST_PANTHEON_ROOTED"]
+
+    def test_explicit_relative_env_stays_relative_to_cwd(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        (repo / "pyproject.toml").write_text("[project]\nname='pantheon'\nversion='0.1.0'\n")
+        workdir = repo / "nested"
+        workdir.mkdir()
+        env_file = workdir / "custom.env"
+        env_file.write_text("TEST_PANTHEON_CUSTOM=custom\n")
+        monkeypatch.chdir(workdir)
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TEST_PANTHEON_CUSTOM", None)
+            load_env("custom.env")
+            assert os.environ["TEST_PANTHEON_CUSTOM"] == "custom"
+            del os.environ["TEST_PANTHEON_CUSTOM"]
+
 
 class TestSkillsDir:
     def test_env_override(self):
@@ -84,6 +126,23 @@ class TestSkillsDir:
         monkeypatch.delenv("AGENTS_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
         assert skills_dir() == ".agents/skills"
+
+
+class TestRepoRoot:
+    def test_repo_root_found_from_nested_directory(self, tmp_path):
+        repo = tmp_path / "repo"
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        (repo / "pyproject.toml").write_text("[project]\nname='pantheon'\nversion='0.1.0'\n")
+        nested = repo / "a" / "b"
+        nested.mkdir(parents=True)
+
+        assert repo_root(nested) == repo
+
+    def test_repo_root_returns_none_when_not_found(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+
+        assert repo_root(outside) is None
 
 
 class TestGatewayUrl:

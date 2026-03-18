@@ -235,3 +235,50 @@ class TestPathRestrictions:
             assert ReadFile().execute({"path": path}) == "free"
         finally:
             Path(path).unlink()
+
+    def test_list_dir_blocked(self):
+        with tempfile.TemporaryDirectory() as allowed:
+            with tempfile.TemporaryDirectory() as blocked:
+                tool = ListDir(allowed_roots=[allowed])
+                result = tool.execute({"path": blocked})
+                assert "outside allowed roots" in result
+
+    def test_search_files_blocked(self):
+        with tempfile.TemporaryDirectory() as allowed:
+            with tempfile.TemporaryDirectory() as blocked:
+                tool = SearchFiles(allowed_roots=[allowed])
+                result = tool.execute({"pattern": "**/*", "root": blocked})
+                assert "outside allowed roots" in result
+
+    def test_builtins_are_scoped_to_repo_root(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        (repo / "pyproject.toml").write_text("[project]\nname='pantheon'\nversion='0.1.0'\n")
+        root_file = repo / "root.txt"
+        root_file.write_text("root")
+        nested = repo / "nested"
+        nested.mkdir()
+        monkeypatch.chdir(nested)
+
+        registry = builtins()
+        read_tool = registry.get("read_file")
+
+        assert read_tool is not None
+        assert read_tool.execute({"path": str(root_file)}) == "root"
+
+    def test_builtins_block_paths_outside_workspace(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        (repo / "pyproject.toml").write_text("[project]\nname='pantheon'\nversion='0.1.0'\n")
+        nested = repo / "nested"
+        nested.mkdir()
+        outside = tmp_path / "outside.txt"
+        outside.write_text("outside")
+        monkeypatch.chdir(nested)
+
+        registry = builtins()
+        read_tool = registry.get("read_file")
+
+        assert read_tool is not None
+        result = read_tool.execute({"path": str(outside)})
+        assert "outside allowed roots" in result

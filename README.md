@@ -123,7 +123,9 @@ Pantheon uses two utility-script locations:
 The shared script index and conventions live in `.agents/scripts/README.md`.
 Current shared utilities:
 
+- `doctor.py`: diagnose import paths, env readiness, and local tool availability
 - `overlay_guard.py`: classify local overlay changes as `create-safe` or `review-required`
+- `secret_scan.py`: scan for likely secrets and dangerous dynamic-execution patterns
 - `skill_validate.py`: validate Pantheon roster, eval, command, and script consistency
 
 ## Project Structure
@@ -147,6 +149,7 @@ pantheon-py/
 
 ```bash
 pip install -e ".[dev]"
+make doctor
 make validate-skills
 pytest
 ruff check src/ tests/

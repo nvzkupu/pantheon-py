@@ -14,6 +14,8 @@ pip install -e ".[dev]"
 make check    # runs lint + tests
 make test     # tests only
 make lint     # lint only
+make doctor
+make secret-scan SCAN_TARGET=.
 make validate-skills
 ```
 

@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from . import config as config_mod
+
 _log = logging.getLogger(__name__)
 _MAX_READ_SIZE = 10 * 1024 * 1024
 
@@ -175,9 +177,26 @@ def _check_allowed(path: Path, allowed_roots: list[Path] | None) -> str | None:
     return f"error: path '{path}' is outside allowed roots: {roots_str}"
 
 
+def _normalize_allowed_roots(allowed_roots: list[str | Path] | None) -> list[Path] | None:
+    if allowed_roots is None:
+        return None
+    return [Path(root) for root in allowed_roots]
+
+
+def default_allowed_roots() -> list[Path]:
+    """Return the default workspace-scoped roots for builtin tools."""
+    roots = [Path.cwd().resolve()]
+    repo_root = config_mod.repo_root()
+    if repo_root is not None:
+        resolved_repo = repo_root.resolve()
+        if resolved_repo not in roots:
+            roots.append(resolved_repo)
+    return roots
+
+
 class ReadFile(Tool):
     def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
-        self._allowed_roots = [Path(r) for r in allowed_roots] if allowed_roots else None
+        self._allowed_roots = _normalize_allowed_roots(allowed_roots)
 
     def name(self) -> str:
         return "read_file"
@@ -215,7 +234,7 @@ class ReadFile(Tool):
 
 class WriteFile(Tool):
     def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
-        self._allowed_roots = [Path(r) for r in allowed_roots] if allowed_roots else None
+        self._allowed_roots = _normalize_allowed_roots(allowed_roots)
 
     def name(self) -> str:
         return "write_file"
@@ -255,6 +274,9 @@ class WriteFile(Tool):
 
 
 class ListDir(Tool):
+    def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
+        self._allowed_roots = _normalize_allowed_roots(allowed_roots)
+
     def name(self) -> str:
         return "list_dir"
 
@@ -279,13 +301,19 @@ class ListDir(Tool):
 
     def execute(self, args: dict) -> str:
         try:
-            entries = sorted(Path(args["path"]).iterdir())
+            path = Path(args["path"])
+            if err := _check_allowed(path, self._allowed_roots):
+                return err
+            entries = sorted(path.iterdir())
             return "\n".join(f"{e.name}/" if e.is_dir() else e.name for e in entries)
         except OSError as e:
             return f"error: {e}"
 
 
 class SearchFiles(Tool):
+    def __init__(self, allowed_roots: list[str | Path] | None = None) -> None:
+        self._allowed_roots = _normalize_allowed_roots(allowed_roots)
+
     def name(self) -> str:
         return "search_files"
 
@@ -313,12 +341,21 @@ class SearchFiles(Tool):
 
     def execute(self, args: dict) -> str:
         root = Path(args.get("root", "."))
+        if err := _check_allowed(root, self._allowed_roots):
+            return err
         matches = list(root.glob(args["pattern"]))[:100]
         return "\n".join(str(m) for m in matches) if matches else "no matches found"
 
 
-def builtins() -> Registry:
+def builtins(allowed_roots: list[str | Path] | None = None) -> Registry:
     r = Registry()
-    for t in (ShellExec(), ReadFile(), WriteFile(), ListDir(), SearchFiles()):
+    roots = default_allowed_roots() if allowed_roots is None else allowed_roots
+    for t in (
+        ShellExec(),
+        ReadFile(roots),
+        WriteFile(roots),
+        ListDir(roots),
+        SearchFiles(roots),
+    ):
         r.register(t)
     return r

@@ -27,9 +27,13 @@ member's workflow.
 
 ## Shared Script Index
 
+- `doctor.py`: Diagnose Pantheon workspace health, import resolution, env
+  readiness, and optional gateway/GitLab/skillgrade requirements.
 - `overlay_guard.py`: Compare two local trees, classify paths as
   `create-safe` or `review-required`, generate a review package, and optionally
   copy only missing files.
+- `secret_scan.py`: Scan a file tree for likely secrets and dangerous
+  `eval`/`exec` usage with redacted previews and CI-friendly exit codes.
 - `skill_validate.py`: Validate Pantheon operational consistency across skill
   rosters, eval coverage, shared script docs, agent-local script docs, and
   Cursor command discoverability.

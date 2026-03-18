@@ -1,4 +1,4 @@
-.PHONY: install dev test lint validate-skills check clean eval eval-skill eval-preview eval-init
+.PHONY: install dev test lint doctor secret-scan validate-skills check clean eval eval-skill eval-preview eval-init
 
 install:
 	pip install .
@@ -11,6 +11,14 @@ test:
 
 lint:
 	ruff check src/ tests/
+
+doctor:
+	python .agents/scripts/doctor.py check
+
+SCAN_TARGET ?= .
+
+secret-scan:
+	python .agents/scripts/secret_scan.py scan "$(SCAN_TARGET)"
 
 validate-skills:
 	python .agents/scripts/skill_validate.py validate

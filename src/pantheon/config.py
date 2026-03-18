@@ -6,11 +6,44 @@ import os
 from pathlib import Path
 
 
+def repo_root(start: str | Path | None = None) -> Path | None:
+    """Return the Pantheon repository root if one can be discovered."""
+    search_starts = [Path(start)] if start is not None else [Path.cwd(), Path(__file__)]
+    seen: set[Path] = set()
+
+    for base in search_starts:
+        current = base.resolve()
+        if current.is_file():
+            current = current.parent
+
+        for candidate in (current, *current.parents):
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if (candidate / "pyproject.toml").exists() and (candidate / ".agents" / "skills").is_dir():
+                return candidate
+
+    return None
+
+
+def _resolve_env_path(path: str) -> Path:
+    """Resolve an env file path with repo-root awareness for the default case."""
+    resolved = Path(path).expanduser()
+    if resolved.is_absolute() or path != ".env":
+        return resolved
+
+    root = repo_root()
+    if root is not None:
+        return root / ".env"
+
+    return resolved
+
+
 def load_env(path: str = ".env") -> None:
-    p = Path(path)
+    p = _resolve_env_path(path)
     if not p.exists():
         return
-    for line in p.read_text().splitlines():
+    for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
