@@ -42,6 +42,33 @@ def _env_value(names: tuple[str, ...]) -> str | None:
     return None
 
 
+def load_env_file(root: Path | None) -> bool:
+    """Load repo-local .env values into the process if present.
+
+    Existing environment variables win. Returns True when a .env file was found.
+    """
+    if root is None:
+        return False
+
+    env_path = root / ".env"
+    if not env_path.exists():
+        return False
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value and len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+    return True
+
+
 def check_repo_root(root: Path | None) -> CheckResult:
     if root is None:
         return CheckResult(
@@ -173,6 +200,7 @@ def run_checks(
     require_gitlab: bool,
 ) -> list[CheckResult]:
     """Run the doctor checks and return the outcomes."""
+    load_env_file(root)
     results = [
         check_repo_root(root),
         check_env_file(root),

@@ -89,6 +89,42 @@ class TestDoctor:
         assert any(check.name == "env:api-key" for check in failing)
         assert any(check.name == "env:gateway-url" for check in failing)
 
+    def test_run_checks_loads_env_file_before_env_validation(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        (repo / ".agents" / "skills").mkdir(parents=True)
+        write(repo / "pyproject.toml", "[project]\nname='pantheon'\nversion='0.1.0'\n")
+        write(
+            repo / ".env",
+            "API_KEY=from-env-file\nGATEWAY_URL=https://gateway.example/v1\n"
+            "GITLAB_PERSONAL_ACCESS_TOKEN=gitlab-token\n",
+        )
+        monkeypatch.delenv("API_KEY", raising=False)
+        monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+        monkeypatch.delenv("GATEWAY_URL", raising=False)
+        monkeypatch.delenv("NVIDIA_GATEWAY_URL", raising=False)
+        monkeypatch.delenv("GITLAB_PERSONAL_ACCESS_TOKEN", raising=False)
+        monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
+        monkeypatch.setattr(
+            doctor.importlib.util,
+            "find_spec",
+            lambda _name: SimpleNamespace(
+                origin=str(repo / "src" / "pantheon" / "__init__.py"),
+                submodule_search_locations=None,
+            ),
+        )
+
+        checks = doctor.run_checks(
+            root=repo,
+            require_gateway=True,
+            require_skillgrade=False,
+            require_gitlab=True,
+        )
+
+        by_name = {check.name: check for check in checks}
+        assert by_name["env:api-key"].status == "ok"
+        assert by_name["env:gateway-url"].status == "ok"
+        assert by_name["env:gitlab-pat"].status == "ok"
+
 
 class TestSecretScan:
     def test_scan_path_finds_secret_and_eval(self, tmp_path):
